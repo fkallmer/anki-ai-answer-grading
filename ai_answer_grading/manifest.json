@@ -1,0 +1,6 @@
+{
+    "package": "ai_answer_grading",
+    "name": "AI Answer Grading",
+    "min_point_version": 231000,
+    "conflicts": []
+}

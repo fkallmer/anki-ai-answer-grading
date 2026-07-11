@@ -1,0 +1,46 @@
+<b>AI Answer Grading — Active recall with LLM feedback</b>
+
+Type your answer into a text box below the card front. An LLM (Anthropic Claude, via the Anthropic API or AWS Bedrock) grades it against the card back — optionally informed by your own lecture script (PDF) — explains what was right, missing, or wrong, and conservatively derives an Again/Hard/Good/Easy rating that feeds into Anki's real (FSRS-compatible) scheduling.
+
+<b>How it works</b>
+
+<ol>
+<li>On the question side, a text box appears below the card. Type your answer and press Ctrl+Enter (or click "Bewerten").</li>
+<li>The card is revealed; grading runs in the background (the UI never blocks).</li>
+<li>A feedback panel shows a 0–100 score, the suggested rating, what was correct / missing / wrong, and — for wrong answers — a tutor-style explanation of the correct answer.</li>
+<li>The suggested ease button is highlighted. Confirm with Ctrl+Enter, override with keys 1–4, or let auto mode advance automatically on Good/Easy (it always pauses on Again/Hard so you can read the explanation).</li>
+<li>Leave the box empty and reveal normally — Anki behaves exactly as usual, no API call is made.</li>
+</ol>
+
+<b>Features</b>
+
+<ul>
+<li><b>Two providers:</b> Anthropic API (api key) or AWS Bedrock (Bedrock API key / IAM credentials, no boto3 required)</li>
+<li><b>Lecture-script context:</b> map decks (incl. subdecks) to your own PDF/text scripts via a file picker; the script helps the model understand your course's terminology and notation — with prompt caching so it is billed only once per session</li>
+<li><b>Images & Image Occlusion:</b> card images are sent along; native Anki Image Occlusion cards are detected and graded against the exact occluded region</li>
+<li><b>Customizable grading prompt:</b> adjust persona, strictness and rating criteria in a settings dialog — the JSON output contract stays intact</li>
+<li><b>Conservative rating:</b> the model is instructed to pick the lower rating when in doubt, so leniency does not corrupt your scheduling</li>
+<li><b>Robust error handling:</b> timeouts, rate limits and parse failures never break the normal review flow — manual rating always works</li>
+<li>Settings dialog (no JSON editing needed), test call from the Tools menu, keyboard-first workflow</li>
+</ul>
+
+<b>⚠️ Privacy & cost — please read</b>
+
+This add-on sends card content (question, answer, your typed answer, card images, and excerpts of any lecture script you configure) to the LLM provider you select — Anthropic (anthropic.com) or Amazon Web Services (AWS Bedrock). Nothing is sent unless you actively submit an answer for grading. You need your own API key, and every grading call costs money with your provider (typically well under a cent per card with default settings; images and large scripts increase cost). API keys are stored in plain text in Anki's add-on configuration.
+
+<b>Setup</b>
+
+<ol>
+<li>Install the add-on and restart Anki.</li>
+<li>Tools → AI Answer Grading → Einstellungen… — choose your provider and enter your API key.</li>
+<li>Optional: Tools → AI Answer Grading → Skript für Deck wählen… to attach lecture PDFs to a deck.</li>
+<li>Verify with Tools → AI Answer Grading → Test-Bewertung ausführen.</li>
+</ol>
+
+Note: the user interface and default feedback language are currently German (the feedback language is configurable). English UI is on the roadmap — feedback welcome.
+
+<b>Compatibility:</b> current Anki (Qt6, 23.10+). Not tested on 2.1.x legacy versions.
+
+Source code, issue tracker and detailed documentation: GITHUB_URL_HERE
+
+License: GNU AGPLv3. Bundles pypdf (BSD-3-Clause) for PDF extraction.

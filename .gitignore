@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+ai_answer_grading/user_files/
+ai_answer_grading/meta.json
+ai_answer_grading.ankiaddon
+.DS_Store

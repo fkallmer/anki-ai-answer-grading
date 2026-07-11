@@ -1,0 +1,21 @@
+{
+    "provider": "anthropic",
+    "api_key": "",
+    "model": "claude-sonnet-4-6",
+    "aws_region": "eu-central-1",
+    "bedrock_api_key": "",
+    "aws_access_key_id": "",
+    "aws_secret_access_key": "",
+    "aws_session_token": "",
+    "bedrock_model": "eu.anthropic.claude-sonnet-4-5-20250929-v1:0",
+    "auto_answer": false,
+    "auto_answer_delay_ms": 2500,
+    "send_images": true,
+    "max_images": 3,
+    "deck_context_map": {},
+    "max_context_chars": 150000,
+    "feedback_language": "Deutsch",
+    "custom_prompt": "",
+    "request_timeout_s": 60,
+    "debug_logging": false
+}
