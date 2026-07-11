@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from aqt import gui_hooks, mw
-from aqt.qt import QAction, QMenu
+from aqt.qt import QAction, QMenu, QTimer
 
-from . import settings, ui
+from . import settings, ui, wizard
 
 
 def _on_state_shortcuts(state: str, shortcuts: list) -> None:
@@ -28,6 +28,10 @@ def register() -> None:
     settings_action.triggered.connect(settings.show_settings)
     menu.addAction(settings_action)
 
+    wizard_action = QAction("Einrichtung starten…", mw)
+    wizard_action.triggered.connect(wizard.show_wizard)
+    menu.addAction(wizard_action)
+
     assign_action = QAction("Skript für Deck wählen…", mw)
     assign_action.triggered.connect(ui.assign_deck_context)
     menu.addAction(assign_action)
@@ -46,3 +50,9 @@ def register() -> None:
     menu.addAction(test_action)
 
     mw.form.menuTools.addMenu(menu)
+
+    # First-run setup: show once when nothing is configured yet, slightly
+    # delayed so Anki's main window is fully up.
+    gui_hooks.profile_did_open.append(
+        lambda: QTimer.singleShot(1200, wizard.maybe_show_wizard)
+    )

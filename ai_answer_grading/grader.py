@@ -372,6 +372,77 @@ def _post_anthropic(
     return response.json()
 
 
+def _extract_text_openai(response_json: dict[str, Any]) -> str:
+    """Text from an OpenAI-compatible chat.completions response."""
+    try:
+        content = response_json["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError) as exc:
+        raise GradingError(f"Unerwartetes Antwortformat vom Provider: {exc}") from exc
+    if isinstance(content, list):  # some servers return content parts
+        content = "".join(
+            part.get("text", "") for part in content if isinstance(part, dict)
+        )
+    return content or ""
+
+
+def _post_openai(
+    config: dict[str, Any],
+    system_blocks: list[dict[str, Any]],
+    user_content: str | list[dict[str, Any]],
+    max_tokens: int = MAX_OUTPUT_TOKENS,
+) -> dict[str, Any]:
+    """OpenAI-compatible chat.completions (Gemini, OpenRouter, Groq, Ollama…)."""
+    import requests
+
+    base_url = (config.get("openai_base_url") or "").strip().rstrip("/")
+    model = (config.get("openai_model") or "").strip()
+    url = base_url + "/chat/completions"
+
+    # cache_control is Anthropic-specific — system blocks become one string.
+    system_text = "\n\n".join(block["text"] for block in system_blocks)
+
+    if isinstance(user_content, str):
+        oa_content: str | list[dict[str, Any]] = user_content
+    else:
+        oa_content = [
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:{b['source']['media_type']};base64,{b['source']['data']}"
+                },
+            }
+            if b.get("type") == "image"
+            else {"type": "text", "text": b.get("text", "")}
+            for b in user_content
+        ]
+
+    payload = {
+        "model": model,
+        "max_tokens": max_tokens,
+        "messages": [
+            {"role": "system", "content": system_text},
+            {"role": "user", "content": oa_content},
+        ],
+    }
+    headers = {"content-type": "application/json"}
+    key = (config.get("openai_api_key") or "").strip() or os.environ.get("OPENAI_API_KEY", "")
+    if key:  # local servers like Ollama need no key
+        headers["authorization"] = f"Bearer {key}"
+    timeout = float(config.get("request_timeout_s") or 60)
+
+    response = requests.post(url, json=payload, headers=headers, timeout=timeout)
+    if response.status_code == 429:
+        retry_after = response.headers.get("retry-after")
+        delay = min(float(retry_after) if retry_after else 2.0, 15.0)
+        log.warning("Rate limit (429), retrying once after %.1fs", delay)
+        time.sleep(delay)
+        response = requests.post(url, json=payload, headers=headers, timeout=timeout)
+
+    if response.status_code != 200:
+        _raise_http_error(response.status_code, response.text)
+    return response.json()
+
+
 def _resolve_bedrock_bearer(config: dict[str, Any]) -> str:
     """Long-term Bedrock API key (Bearer token), config or env fallback."""
     return (config.get("bedrock_api_key") or "").strip() or os.environ.get(
@@ -496,6 +567,15 @@ def _validate_credentials(config: dict[str, Any]) -> str:
     elif provider == "bedrock":
         if not _resolve_bedrock_bearer(config):
             _resolve_aws_credentials(config)
+    elif provider == "openai":
+        if not (config.get("openai_base_url") or "").strip():
+            raise GradingError(
+                "OpenAI-kompatibler Provider: 'openai_base_url' muss gesetzt sein "
+                "(z. B. http://localhost:11434/v1 für Ollama)."
+            )
+        if not (config.get("openai_model") or "").strip():
+            raise GradingError("OpenAI-kompatibler Provider: 'openai_model' muss gesetzt sein.")
+        # API key is optional — local servers (Ollama, LM Studio) need none.
     else:
         raise GradingError(f"Unbekannter Provider: {provider!r}")
     return provider
@@ -509,6 +589,8 @@ def warm_cache(config: dict[str, Any], script_text: str) -> None:
     Blocking — call from a background thread; raises GradingError on failure.
     """
     provider = _validate_credentials(config)
+    if provider == "openai":
+        return  # no Anthropic-style prompt caching to warm on generic servers
     language = config.get("feedback_language") or "Deutsch"
     system_blocks = build_system_blocks(
         language, script_text, custom_rules=config.get("custom_prompt")
@@ -555,14 +637,14 @@ def grade_answer(
     def _call(content: str | list[dict[str, Any]]) -> str:
         try:
             if provider == "bedrock":
-                response_json = _post_bedrock(config, system_blocks, content)
-            else:
-                response_json = _post_anthropic(config, system_blocks, content)
+                return _extract_text(_post_bedrock(config, system_blocks, content))
+            if provider == "openai":
+                return _extract_text_openai(_post_openai(config, system_blocks, content))
+            return _extract_text(_post_anthropic(config, system_blocks, content))
         except requests.exceptions.Timeout as exc:
             raise GradingError("Zeitüberschreitung beim API-Call.") from exc
         except requests.exceptions.RequestException as exc:
             raise GradingError(f"Netzwerkfehler: {exc}") from exc
-        return _extract_text(response_json)
 
     text = _call(user_content)
     try:

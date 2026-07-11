@@ -42,6 +42,40 @@ BEDROCK_MODELS = [
     "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
 ]
 
+# Presets for the OpenAI-compatible provider: (label, base_url, model, key_url)
+OPENAI_PRESETS = [
+    (
+        "Google Gemini (kostenloses Kontingent)",
+        "https://generativelanguage.googleapis.com/v1beta/openai",
+        "gemini-2.5-flash",
+        "https://aistudio.google.com/apikey",
+    ),
+    (
+        "OpenRouter",
+        "https://openrouter.ai/api/v1",
+        "google/gemini-2.5-flash",
+        "https://openrouter.ai/keys",
+    ),
+    (
+        "Groq (kostenloses Kontingent)",
+        "https://api.groq.com/openai/v1",
+        "llama-3.3-70b-versatile",
+        "https://console.groq.com/keys",
+    ),
+    (
+        "Ollama (lokal, kein Key nötig)",
+        "http://localhost:11434/v1",
+        "qwen2.5:32b",
+        "https://ollama.com/download",
+    ),
+    (
+        "LM Studio (lokal, kein Key nötig)",
+        "http://localhost:1234/v1",
+        "",
+        "https://lmstudio.ai",
+    ),
+]
+
 
 def _addon_id() -> str:
     return __name__.split(".")[0]
@@ -72,7 +106,7 @@ class SettingsDialog(QDialog):
         provider_box = QGroupBox("Provider")
         provider_form = QFormLayout(provider_box)
         self.provider = QComboBox()
-        self.provider.addItems(["anthropic", "bedrock"])
+        self.provider.addItems(["anthropic", "bedrock", "openai"])
         self.provider.currentTextChanged.connect(self._toggle_provider_fields)
         provider_form.addRow("Provider:", self.provider)
         layout.addWidget(provider_box)
@@ -105,6 +139,29 @@ class SettingsDialog(QDialog):
         self.bedrock_model.addItems(BEDROCK_MODELS)
         bedrock_form.addRow("Modell/Profil-ID:", self.bedrock_model)
         layout.addWidget(self.bedrock_box)
+
+        # OpenAI-compatible (Gemini free tier, OpenRouter, Groq, Ollama, …)
+        self.openai_box = QGroupBox("OpenAI-kompatibler Dienst (Gemini, OpenRouter, Groq, Ollama …)")
+        openai_form = QFormLayout(self.openai_box)
+        self.openai_preset = QComboBox()
+        self.openai_preset.addItem("— Preset wählen —")
+        for label, *_rest in OPENAI_PRESETS:
+            self.openai_preset.addItem(label)
+        self.openai_preset.currentIndexChanged.connect(self._apply_openai_preset)
+        openai_form.addRow("Preset:", self.openai_preset)
+        self.openai_base_url = QLineEdit()
+        self.openai_base_url.setPlaceholderText("z. B. http://localhost:11434/v1")
+        openai_form.addRow("Base-URL:", self.openai_base_url)
+        self.openai_api_key = QLineEdit()
+        self.openai_api_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self.openai_api_key.setPlaceholderText("leer lassen für lokale Server (Ollama/LM Studio)")
+        openai_form.addRow("API-Key:", self.openai_api_key)
+        self.openai_model = QLineEdit()
+        openai_form.addRow("Modell:", self.openai_model)
+        self.openai_key_link = QLabel("")
+        self.openai_key_link.setOpenExternalLinks(True)
+        openai_form.addRow("", self.openai_key_link)
+        layout.addWidget(self.openai_box)
 
         # Behavior
         behavior_box = QGroupBox("Verhalten")
@@ -158,7 +215,19 @@ class SettingsDialog(QDialog):
     def _toggle_provider_fields(self, provider: str) -> None:
         self.anthropic_box.setVisible(provider == "anthropic")
         self.bedrock_box.setVisible(provider == "bedrock")
+        self.openai_box.setVisible(provider == "openai")
         self.adjustSize()
+
+    def _apply_openai_preset(self, index: int) -> None:
+        if index < 1:
+            return
+        label, base_url, model, key_url = OPENAI_PRESETS[index - 1]
+        self.openai_base_url.setText(base_url)
+        if model:
+            self.openai_model.setText(model)
+        self.openai_key_link.setText(
+            f'<a href="{key_url}">API-Key holen / Anbieter-Seite öffnen</a>'
+        )
 
     def _load(self) -> None:
         c = self.config
@@ -168,6 +237,9 @@ class SettingsDialog(QDialog):
         self.bedrock_api_key.setText(c.get("bedrock_api_key") or "")
         self.aws_region.setText(c.get("aws_region") or "eu-central-1")
         self.bedrock_model.setCurrentText(c.get("bedrock_model") or BEDROCK_MODELS[0])
+        self.openai_base_url.setText(c.get("openai_base_url") or "")
+        self.openai_api_key.setText(c.get("openai_api_key") or "")
+        self.openai_model.setText(c.get("openai_model") or "")
         self.auto_answer.setChecked(bool(c.get("auto_answer")))
         self.auto_delay.setValue(int(c.get("auto_answer_delay_ms") or 2500))
         self.send_images.setChecked(bool(c.get("send_images", True)))
@@ -186,6 +258,9 @@ class SettingsDialog(QDialog):
         c["bedrock_api_key"] = self.bedrock_api_key.text().strip()
         c["aws_region"] = self.aws_region.text().strip()
         c["bedrock_model"] = self.bedrock_model.currentText().strip()
+        c["openai_base_url"] = self.openai_base_url.text().strip()
+        c["openai_api_key"] = self.openai_api_key.text().strip()
+        c["openai_model"] = self.openai_model.text().strip()
         c["auto_answer"] = self.auto_answer.isChecked()
         c["auto_answer_delay_ms"] = self.auto_delay.value()
         c["send_images"] = self.send_images.isChecked()

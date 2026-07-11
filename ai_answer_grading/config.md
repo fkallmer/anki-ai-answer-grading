@@ -27,6 +27,25 @@
   sind, hängt von deinem Bedrock-Konto und der Region ab (AWS-Konsole →
   Bedrock → Model access).
 
+### OpenAI-kompatible Dienste (`provider: "openai"`)
+
+Für Google Gemini (kostenloses Kontingent), OpenRouter, Groq, Ollama,
+LM Studio und jeden anderen Dienst mit OpenAI-kompatibler API. Im
+Einstellungs-Dialog gibt es fertige Presets.
+
+- **`openai_base_url`**: API-Basis-URL, z. B.
+  `https://generativelanguage.googleapis.com/v1beta/openai` (Gemini) oder
+  `http://localhost:11434/v1` (Ollama).
+- **`openai_api_key`**: API-Key des Dienstes. Leer lassen für lokale Server
+  (Ollama/LM Studio). Fallback: Umgebungsvariable `OPENAI_API_KEY`.
+- **`openai_model`**: Modellname, z. B. `gemini-2.5-flash` oder `qwen2.5:32b`.
+
+Hinweis: Prompt-Caching (Skript-Kontext) ist Anthropic-spezifisch und bei
+diesen Diensten inaktiv; Bilder funktionieren nur mit Vision-fähigen Modellen.
+
+- **`setup_completed`**: intern — merkt sich, dass der Erststart-Assistent
+  gelaufen ist (`Extras → AI Answer Grading → Einrichtung starten…`).
+
 ## Verhalten
 
 - **`auto_answer`**: `true` = das vom LLM abgeleitete Rating wird bei

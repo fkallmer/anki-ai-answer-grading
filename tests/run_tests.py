@@ -198,7 +198,42 @@ class TestWarmCache(unittest.TestCase):
             "anthropic",
         )
         with self.assertRaises(GradingError):
-            grader._validate_credentials({"provider": "openai"})
+            grader._validate_credentials({"provider": "mistral"})
+
+    def test_validate_openai_provider(self):
+        # base_url + model required; key optional (local servers)
+        self.assertEqual(
+            grader._validate_credentials({
+                "provider": "openai",
+                "openai_base_url": "http://localhost:11434/v1",
+                "openai_model": "qwen2.5:32b",
+            }),
+            "openai",
+        )
+        with self.assertRaises(GradingError):
+            grader._validate_credentials({"provider": "openai", "openai_model": "x"})
+        with self.assertRaises(GradingError):
+            grader._validate_credentials(
+                {"provider": "openai", "openai_base_url": "http://x/v1"}
+            )
+
+    def test_extract_text_openai(self):
+        self.assertEqual(
+            grader._extract_text_openai(
+                {"choices": [{"message": {"content": '{"score": 1}'}}]}
+            ),
+            '{"score": 1}',
+        )
+        self.assertEqual(
+            grader._extract_text_openai(
+                {"choices": [{"message": {"content": [
+                    {"type": "text", "text": "a"}, {"type": "text", "text": "b"}
+                ]}}]}
+            ),
+            "ab",
+        )
+        with self.assertRaises(GradingError):
+            grader._extract_text_openai({"error": {"message": "nope"}})
 
 
 class TestDeckMapping(unittest.TestCase):
