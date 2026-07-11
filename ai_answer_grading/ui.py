@@ -64,6 +64,7 @@ class GradingSession:
         self.io_used: bool = False  # graded via occlusion coordinates
         self.slides: list[tuple[str, str]] = []  # (label, data_uri) rendered slides
         self.slide_refs: list[str] = []  # text fallback when rendering unavailable
+        self.auto_cancelled: bool = False  # user aborted the auto-advance countdown
 
     def reset(self) -> None:
         self.card_id = None
@@ -73,6 +74,7 @@ class GradingSession:
         self.io_used = False
         self.slides = []
         self.slide_refs = []
+        self.auto_cancelled = False
 
 
 session = GradingSession()
@@ -217,8 +219,14 @@ def _panel_html() -> str:
         )
 
     auto = _config().get("auto_answer", False)
-    if auto and r.rating >= 3:
-        hint = "Auto: wird übernommen …"
+    if auto and r.rating >= 3 and not session.auto_cancelled:
+        secs = max(1, round(int(_config().get("auto_answer_delay_ms") or 2500) / 1000))
+        hint = (
+            f'Auto: Übernahme in <span id="ai-auto-count">{secs}</span>&nbsp;s&nbsp;… '
+            '<a id="ai-auto-cancel" href="#" style="color:inherit; opacity:0.8;">abbrechen</a>'
+        )
+    elif auto and r.rating >= 3:
+        hint = "Auto abgebrochen — Strg+Enter bestätigt, 1–4 überstimmt."
     elif auto:
         hint = "Auto pausiert — Strg+Enter bestätigt, 1–4 überstimmt."
     else:
@@ -294,6 +302,10 @@ def on_js_message(handled: tuple[bool, Any], message: str, context: Any) -> tupl
     if message.startswith("ai_auto:"):
         enabled = message[len("ai_auto:"):] == "1"
         _set_auto_answer(enabled)
+        return (True, None)
+
+    if message == "ai_cancel_auto":
+        session.auto_cancelled = True
         return (True, None)
 
     return handled
@@ -612,7 +624,47 @@ def _maybe_schedule_auto_answer(card_id: int, rating: int) -> None:
         tooltip("Auto-Modus pausiert: Again/Hard bitte selbst bestätigen.")
         return
     delay = int(_config().get("auto_answer_delay_ms") or 2500)
-    QTimer.singleShot(delay, lambda: _auto_answer(card_id, rating))
+    QTimer.singleShot(
+        delay,
+        lambda: None if session.auto_cancelled else _auto_answer(card_id, rating),
+    )
+    _start_countdown_js(delay)
+
+
+def _start_countdown_js(delay_ms: int) -> None:
+    """Live countdown in the panel hint + cancel-link wiring (retries until
+    the panel is in the DOM)."""
+    js = f"""
+(function() {{
+  var tries = 0;
+  (function attempt() {{
+    var count = document.getElementById('ai-auto-count');
+    if (!count) {{
+      if (tries++ < 6) {{ setTimeout(attempt, 250); }}
+      return;
+    }}
+    var end = Date.now() + {delay_ms};
+    var timer = setInterval(function() {{
+      var s = Math.max(0, Math.ceil((end - Date.now()) / 1000));
+      count.textContent = s;
+      if (s <= 0) {{ clearInterval(timer); }}
+    }}, 200);
+    var cancel = document.getElementById('ai-auto-cancel');
+    if (cancel) {{
+      cancel.addEventListener('click', function(e) {{
+        e.preventDefault();
+        clearInterval(timer);
+        count.parentElement.textContent =
+          'Auto abgebrochen — Strg+Enter bestätigt, 1–4 überstimmt.';
+        pycmd('ai_cancel_auto');
+      }});
+    }}
+  }})();
+}})();"""
+    try:
+        mw.reviewer.web.eval(js)
+    except Exception:
+        log.exception("Countdown-JS konnte nicht injiziert werden")
 
 
 def _auto_answer(card_id: int, rating: int) -> None:
