@@ -1,3 +1,4 @@
+.claude/
 __pycache__/
 *.pyc
 ai_answer_grading/user_files/
