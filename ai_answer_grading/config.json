@@ -11,6 +11,7 @@
     "auto_answer": false,
     "auto_answer_delay_ms": 2500,
     "send_images": true,
+    "show_source_slides": true,
     "max_images": 3,
     "deck_context_map": {},
     "max_context_chars": 150000,

@@ -6,6 +6,7 @@ All aqt interaction lives here; grading logic is in grader.py.
 
 from __future__ import annotations
 
+import base64
 import html
 import json
 import logging
@@ -19,7 +20,7 @@ from aqt import mw
 from aqt.qt import QTimer
 from aqt.utils import showText, tooltip
 
-from . import context_store, grader, media
+from . import context_store, grader, media, pdf_render
 from .grader import GradingError, GradingResult
 
 log = logging.getLogger("ai_answer_grading")
@@ -61,6 +62,8 @@ class GradingSession:
         self.result: Optional[GradingResult] = None
         self.error: str = ""
         self.io_used: bool = False  # graded via occlusion coordinates
+        self.slides: list[tuple[str, str]] = []  # (label, data_uri) rendered slides
+        self.slide_refs: list[str] = []  # text fallback when rendering unavailable
 
     def reset(self) -> None:
         self.card_id = None
@@ -68,6 +71,8 @@ class GradingSession:
         self.result = None
         self.error = ""
         self.io_used = False
+        self.slides = []
+        self.slide_refs = []
 
 
 session = GradingSession()
@@ -233,8 +238,26 @@ def _panel_html() -> str:
   {_points("Fehlt", "❓", r.missing_points)}
   {_points("Falsch", "❌", r.wrong_points)}
   {_explanation_html(r.explanation)}
+  {_slides_html()}
   {_io_note_html()}
 </div>"""
+
+
+def _slides_html() -> str:
+    """Rendered lecture slides (or a text reference as fallback)."""
+    parts = []
+    for label, data_uri in session.slides:
+        parts.append(
+            f'<div style="margin-top:0.7em;"><b>📑 {html.escape(label)}</b><br>'
+            f'<img src="{data_uri}" style="max-width:100%; border:1px solid #8884;'
+            ' border-radius:6px; margin-top:0.3em;"></div>'
+        )
+    if not parts and session.slide_refs:
+        refs = ", ".join(html.escape(ref) for ref in session.slide_refs)
+        parts.append(
+            f'<div style="margin-top:0.6em; font-size:0.85em; opacity:0.75;">📑 Im Skript: {refs}</div>'
+        )
+    return "".join(parts)
 
 
 def _io_note_html() -> str:
@@ -458,6 +481,7 @@ def _on_grading_done(future: Future, card_id: int) -> None:
         result = future.result()
         session.status = "done"
         session.result = result
+        _prepare_slides(card_id, result)
     except GradingError as exc:
         session.status = "error"
         session.error = str(exc)
@@ -479,6 +503,48 @@ def _on_grading_done(future: Future, card_id: int) -> None:
         rating = session.result.rating
         _highlight_ease_button(rating)
         _maybe_schedule_auto_answer(card_id, rating)
+
+
+def _prepare_slides(card_id: int, result: GradingResult) -> None:
+    """Render the model-cited script slides to data URIs (main thread only).
+
+    Falls back to text references when QtPdf is unavailable or a page
+    cannot be rendered."""
+    config = _config()
+    if not config.get("show_source_slides", True) or not result.source_pages:
+        return
+    try:
+        card = mw.col.get_card(card_id)
+        deck_name = mw.col.decks.name(card.odid or card.did)
+    except Exception:
+        return
+    files = context_store.resolve_deck_files(
+        deck_name, config.get("deck_context_map") or {}
+    )
+    pdfs = [f for f in files if f.lower().endswith(".pdf")]
+    if not pdfs:
+        return
+    slide_cache = os.path.join(
+        mw.addonManager.addonsFolder(__name__.split(".")[0]), "user_files", "slide_cache"
+    )
+    for fname, page in result.source_pages[:2]:
+        target = pdfs[0]
+        if fname:
+            for path in pdfs:
+                if fname.lower() in os.path.basename(path).lower():
+                    target = path
+                    break
+        label = f"Folie {page} — {os.path.basename(target)}"
+        png_path = pdf_render.render_page_png(target, page, slide_cache)
+        if png_path:
+            try:
+                with open(png_path, "rb") as f:
+                    encoded = base64.b64encode(f.read()).decode("ascii")
+                session.slides.append((label, "data:image/png;base64," + encoded))
+                continue
+            except OSError:
+                pass
+        session.slide_refs.append(label)
 
 
 def _render_panel_into_webview() -> None:

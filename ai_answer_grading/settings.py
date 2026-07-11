@@ -118,6 +118,8 @@ class SettingsDialog(QDialog):
         behavior_form.addRow("Auto-Verzögerung:", self.auto_delay)
         self.send_images = QCheckBox("Bilder der Karte mitschicken (mehr Tokens)")
         behavior_form.addRow(self.send_images)
+        self.show_slides = QCheckBox("Fundstellen-Folien aus dem Skript im Feedback anzeigen")
+        behavior_form.addRow(self.show_slides)
         self.feedback_language = QLineEdit()
         behavior_form.addRow("Feedback-Sprache:", self.feedback_language)
         layout.addWidget(behavior_box)
@@ -169,6 +171,7 @@ class SettingsDialog(QDialog):
         self.auto_answer.setChecked(bool(c.get("auto_answer")))
         self.auto_delay.setValue(int(c.get("auto_answer_delay_ms") or 2500))
         self.send_images.setChecked(bool(c.get("send_images", True)))
+        self.show_slides.setChecked(bool(c.get("show_source_slides", True)))
         self.feedback_language.setText(c.get("feedback_language") or "Deutsch")
         self.custom_prompt.setPlainText(
             (c.get("custom_prompt") or "").strip() or grader.DEFAULT_GRADING_RULES
@@ -186,6 +189,7 @@ class SettingsDialog(QDialog):
         c["auto_answer"] = self.auto_answer.isChecked()
         c["auto_answer_delay_ms"] = self.auto_delay.value()
         c["send_images"] = self.send_images.isChecked()
+        c["show_source_slides"] = self.show_slides.isChecked()
         c["feedback_language"] = self.feedback_language.text().strip() or "Deutsch"
         prompt_text = self.custom_prompt.toPlainText().strip()
         # Store "" when unchanged from default, so future addon updates to the

@@ -37,17 +37,25 @@ def resolve_deck_files(deck_name: str, deck_context_map: dict[str, Any]) -> list
     return []
 
 
+# Bump when the extraction format changes (e.g. page markers) so stale
+# caches are re-extracted.
+CACHE_FORMAT = 2
+
+
 def _extract_pdf_text(path: str) -> str:
-    """Extract text from a PDF using the vendored pypdf."""
+    """Extract PDF text with per-page markers so the model can cite slides."""
     from pypdf import PdfReader  # vendored in lib/, on sys.path
 
     reader = PdfReader(path)
+    name = os.path.basename(path)
     pages = []
-    for page in reader.pages:
+    for i, page in enumerate(reader.pages, start=1):
         try:
-            pages.append(page.extract_text() or "")
+            text = page.extract_text() or ""
         except Exception as exc:  # single broken page must not kill the run
             log.warning("PDF page extraction failed in %s: %s", path, exc)
+            text = ""
+        pages.append(f"[Seite {i} von {name}]\n{text}")
     return "\n".join(pages)
 
 
@@ -64,7 +72,12 @@ def _get_file_text(source_path: str, cache_dir: str) -> str:
         return ""
 
     stat = os.stat(source_path)
-    meta = {"mtime": stat.st_mtime, "size": stat.st_size, "source": source_path}
+    meta = {
+        "mtime": stat.st_mtime,
+        "size": stat.st_size,
+        "source": source_path,
+        "fmt": CACHE_FORMAT,
+    }
 
     ext = os.path.splitext(source_path)[1].lower()
     if ext not in (".pdf",):
@@ -86,6 +99,7 @@ def _get_file_text(source_path: str, cache_dir: str) -> str:
             if (
                 cached_meta.get("mtime") == meta["mtime"]
                 and cached_meta.get("size") == meta["size"]
+                and cached_meta.get("fmt") == CACHE_FORMAT
             ):
                 with open(txt_path, "r", encoding="utf-8") as f:
                     return f.read()

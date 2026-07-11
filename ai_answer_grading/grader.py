@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import time
 import urllib.parse
 from dataclasses import dataclass, field
@@ -42,6 +43,9 @@ class GradingResult:
     wrong_points: list[str] = field(default_factory=list)
     explanation: str = ""
     feedback: str = ""
+    # (filename, 1-based page) of lecture-script slides the grading refers to;
+    # filename may be "" when the model gave only a page number.
+    source_pages: list[tuple[str, int]] = field(default_factory=list)
 
     @property
     def rating_label(self) -> str:
@@ -77,7 +81,7 @@ Spaced-Repetition-Scheduling und schadet dem Lernenden langfristig."""
 OUTPUT_FORMAT_RULES = """AUSGABEFORMAT:
 Antworte AUSSCHLIESSLICH mit einem einzigen JSON-Objekt, ohne Markdown-Fences,
 ohne Text davor oder danach, exakt in dieser Struktur:
-{"score": <int 0-100>, "rating": <1|2|3|4>, "correct_points": ["..."], "missing_points": ["..."], "wrong_points": ["..."], "explanation": "<Erklärung>", "feedback": "<2-3 Sätze auf {language}>"}
+{"score": <int 0-100>, "rating": <1|2|3|4>, "correct_points": ["..."], "missing_points": ["..."], "wrong_points": ["..."], "explanation": "<Erklärung>", "feedback": "<1-2 Sätze auf {language}>", "source_pages": ["<dateiname>:<seitenzahl>"]}
 
 - "correct_points" / "missing_points" / "wrong_points": kurze Stichpunkte
   (je max. 8 Wörter), KEINE ganzen Sätze. Nur echte inhaltliche Punkte —
@@ -90,6 +94,11 @@ ohne Text davor oder danach, exakt in dieser Struktur:
 - "feedback": 1-2 kurze Sätze auf {language}, direkt und in Du-Form. KEINE
   Wiederholung der Punktelisten oder der Erklärung, KEINE Floskeln und keine
   allgemeinen Lernratschläge ("schau es dir nochmal in Ruhe an" o. Ä.).
+
+- "source_pages": NUR wenn ein Vorlesungsskript mitgegeben wurde und die
+  relevante Information dort steht: die 1-2 wichtigsten Fundstellen im Format
+  "dateiname.pdf:Seitenzahl" (die Seitenzahl steht in den [Seite N von …]-
+  Markern des Skripts). Sonst leere Liste.
 
 WICHTIG: feedback, Punktelisten und explanation dürfen sich inhaltlich NICHT
 wiederholen — jede Information erscheint genau einmal, am passendsten Ort.
@@ -246,6 +255,27 @@ def parse_grading_json(text: str) -> GradingResult:
         value = data.get(key, "")
         return value if isinstance(value, str) else str(value)
 
+    def _parse_source_pages(value: Any) -> list[tuple[str, int]]:
+        """Accept ints, "file.pdf:12", "Seite 7", "skript.pdf S. 4" — max 4."""
+        if isinstance(value, (int, str)):
+            value = [value]
+        if not isinstance(value, list):
+            return []
+        out: list[tuple[str, int]] = []
+        for item in value[:4]:
+            if isinstance(item, int):
+                if item > 0:
+                    out.append(("", item))
+            elif isinstance(item, str):
+                match = re.search(
+                    r"^(?:(.+?)\s*[:|,]\s*)?(?:S(?:eite)?\.?\s*)?(\d+)\s*$", item.strip()
+                )
+                if match:
+                    page = int(match.group(2))
+                    if page > 0:
+                        out.append(((match.group(1) or "").strip(), page))
+        return out
+
     return GradingResult(
         score=score,
         rating=rating,
@@ -254,6 +284,7 @@ def parse_grading_json(text: str) -> GradingResult:
         wrong_points=_str_list("wrong_points"),
         explanation=_str("explanation"),
         feedback=_str("feedback"),
+        source_pages=_parse_source_pages(data.get("source_pages")),
     )
 
 

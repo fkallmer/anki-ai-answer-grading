@@ -55,6 +55,11 @@
   Achtung: Bilder erhöhen den Token-Verbrauch pro Anfrage deutlich.
 - **`max_images`**: maximale Anzahl Bilder pro Anfrage (Default 3). Bilder
   über 4,5 MB werden übersprungen.
+- **`show_source_slides`**: `true` (Default) = wenn ein Vorlesungsskript
+  hinterlegt ist, nennt das Modell die relevanten Fundstellen und das Panel
+  zeigt die betreffenden Folien als Bild (max. 2). Benötigt Qt's
+  PDF-Modul (in aktuellen Anki-Versionen enthalten); fehlt es, wird
+  stattdessen nur die Folien-Nummer als Text angezeigt.
 - **Image Occlusion** (nativer Anki-Notiztyp): wird automatisch erkannt. Das
   Modell erhält das Originalbild plus die Koordinaten des abgefragten
   Bereichs. Hinweis: Bei eng beieinanderliegenden Beschriftungen kann die

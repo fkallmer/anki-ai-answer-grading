@@ -88,6 +88,24 @@ class TestJsonParsing(unittest.TestCase):
         r2 = parse_grading_json('{"score": 90, "rating": 4, "feedback": "Top."}')
         self.assertEqual(r2.explanation, "")
 
+    def test_source_pages_parsing(self):
+        r = parse_grading_json(
+            '{"score": 50, "rating": 2, "feedback": "x", '
+            '"source_pages": ["anatomie.pdf:12", 7, "Seite 3", "skript.pdf S. 4", "quatsch"]}'
+        )
+        self.assertEqual(
+            r.source_pages,
+            [("anatomie.pdf", 12), ("", 7), ("", 3), ("skript.pdf", 4)],
+        )
+
+    def test_source_pages_absent_or_invalid(self):
+        r = parse_grading_json('{"score": 50, "rating": 2, "feedback": "x"}')
+        self.assertEqual(r.source_pages, [])
+        r2 = parse_grading_json(
+            '{"score": 50, "rating": 2, "feedback": "x", "source_pages": {"a": 1}}'
+        )
+        self.assertEqual(r2.source_pages, [])
+
     def test_string_instead_of_list(self):
         r = parse_grading_json(
             '{"score": 50, "rating": 2, "missing_points": "die Definition", "feedback": "x"}'
@@ -224,6 +242,7 @@ class TestPdfExtraction(unittest.TestCase):
             )
             self.assertIsNotNone(ctx)
             self.assertIn("Anki Skript Testinhalt", ctx)
+            self.assertIn("[Seite 1 von skript.pdf]", ctx)  # page marker for citations
 
             # A cache .txt must now exist and be reused.
             cached = [f for f in os.listdir(cache_dir) if f.endswith(".txt")]
