@@ -217,6 +217,44 @@ class TestWarmCache(unittest.TestCase):
                 {"provider": "openai", "openai_base_url": "http://x/v1"}
             )
 
+    def test_validate_cli_provider(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fake_cli = os.path.join(tmp, "claude")
+            with open(fake_cli, "w") as f:
+                f.write("#!/bin/sh\n")
+            self.assertEqual(
+                grader._validate_credentials({"provider": "cli", "cli_path": fake_cli}),
+                "cli",
+            )
+        with self.assertRaises(GradingError):
+            grader._validate_credentials(
+                {"provider": "cli", "cli_path": "/nope/keine-cli"}
+            )
+        with self.assertRaises(GradingError):
+            grader._validate_credentials({"provider": "cli", "cli_type": "chatgpt"})
+
+    def test_run_cli_with_fake_binary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fake_cli = os.path.join(tmp, "claude")
+            with open(fake_cli, "w") as f:
+                f.write('#!/bin/sh\necho \'{"score": 70, "rating": 3, "feedback": "ok"}\'\n')
+            os.chmod(fake_cli, 0o755)
+            config = {"provider": "cli", "cli_type": "claude", "cli_path": fake_cli}
+            result = grader.grade_answer(config, "F", "B", "A")
+            self.assertEqual(result.score, 70)
+            self.assertEqual(result.rating, 3)
+
+    def test_run_cli_failure_exit_code(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fake_cli = os.path.join(tmp, "claude")
+            with open(fake_cli, "w") as f:
+                f.write('#!/bin/sh\necho "kaputt" >&2\nexit 1\n')
+            os.chmod(fake_cli, 0o755)
+            config = {"provider": "cli", "cli_type": "claude", "cli_path": fake_cli}
+            with self.assertRaises(GradingError) as ctx:
+                grader.grade_answer(config, "F", "B", "A")
+            self.assertIn("Exit 1", str(ctx.exception))
+
     def test_extract_text_openai(self):
         self.assertEqual(
             grader._extract_text_openai(

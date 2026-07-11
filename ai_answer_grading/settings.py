@@ -106,7 +106,7 @@ class SettingsDialog(QDialog):
         provider_box = QGroupBox("Provider")
         provider_form = QFormLayout(provider_box)
         self.provider = QComboBox()
-        self.provider.addItems(["anthropic", "bedrock", "openai"])
+        self.provider.addItems(["anthropic", "bedrock", "openai", "cli"])
         self.provider.currentTextChanged.connect(self._toggle_provider_fields)
         provider_form.addRow("Provider:", self.provider)
         layout.addWidget(provider_box)
@@ -163,6 +163,25 @@ class SettingsDialog(QDialog):
         openai_form.addRow("", self.openai_key_link)
         layout.addWidget(self.openai_box)
 
+        # Local CLI (Claude Code / Gemini CLI) — subscription/free, no API key
+        self.cli_box = QGroupBox("Lokale CLI (Claude-Abo bzw. Gemini kostenlos — kein API-Key)")
+        cli_form = QFormLayout(self.cli_box)
+        self.cli_type = QComboBox()
+        self.cli_type.addItems(["claude", "gemini"])
+        cli_form.addRow("CLI:", self.cli_type)
+        self.cli_path = QLineEdit()
+        self.cli_path.setPlaceholderText("leer = automatisch suchen; sonst Ausgabe von `which claude`")
+        cli_form.addRow("CLI-Pfad:", self.cli_path)
+        self.cli_model = QLineEdit()
+        self.cli_model.setPlaceholderText("optional, z. B. claude-haiku-4-5 / gemini-2.5-flash")
+        cli_form.addRow("Modell:", self.cli_model)
+        cli_note = QLabel(
+            '<span style="color:gray; font-size:11px;">CLI muss installiert und '
+            "eingeloggt sein. Langsamer als API; keine Bilder.</span>"
+        )
+        cli_form.addRow("", cli_note)
+        layout.addWidget(self.cli_box)
+
         # Behavior
         behavior_box = QGroupBox("Verhalten")
         behavior_form = QFormLayout(behavior_box)
@@ -216,6 +235,7 @@ class SettingsDialog(QDialog):
         self.anthropic_box.setVisible(provider == "anthropic")
         self.bedrock_box.setVisible(provider == "bedrock")
         self.openai_box.setVisible(provider == "openai")
+        self.cli_box.setVisible(provider == "cli")
         self.adjustSize()
 
     def _apply_openai_preset(self, index: int) -> None:
@@ -240,6 +260,9 @@ class SettingsDialog(QDialog):
         self.openai_base_url.setText(c.get("openai_base_url") or "")
         self.openai_api_key.setText(c.get("openai_api_key") or "")
         self.openai_model.setText(c.get("openai_model") or "")
+        self.cli_type.setCurrentText(c.get("cli_type") or "claude")
+        self.cli_path.setText(c.get("cli_path") or "")
+        self.cli_model.setText(c.get("cli_model") or "")
         self.auto_answer.setChecked(bool(c.get("auto_answer")))
         self.auto_delay.setValue(int(c.get("auto_answer_delay_ms") or 2500))
         self.send_images.setChecked(bool(c.get("send_images", True)))
@@ -261,6 +284,9 @@ class SettingsDialog(QDialog):
         c["openai_base_url"] = self.openai_base_url.text().strip()
         c["openai_api_key"] = self.openai_api_key.text().strip()
         c["openai_model"] = self.openai_model.text().strip()
+        c["cli_type"] = self.cli_type.currentText()
+        c["cli_path"] = self.cli_path.text().strip()
+        c["cli_model"] = self.cli_model.text().strip()
         c["auto_answer"] = self.auto_answer.isChecked()
         c["auto_answer_delay_ms"] = self.auto_delay.value()
         c["send_images"] = self.send_images.isChecked()

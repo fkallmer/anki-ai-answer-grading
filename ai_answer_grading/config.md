@@ -43,6 +43,24 @@ Einstellungs-Dialog gibt es fertige Presets.
 Hinweis: Prompt-Caching (Skript-Kontext) ist Anthropic-spezifisch und bei
 diesen Diensten inaktiv; Bilder funktionieren nur mit Vision-fähigen Modellen.
 
+### Lokale CLI (`provider: "cli"`)
+
+Nutzt eine installierte Kommandozeilen-KI statt eines API-Keys:
+**Claude CLI** (läuft über dein Claude-Pro/Max-Abo, keine Extra-Kosten) oder
+**Gemini CLI** (kostenlos mit Google-Konto).
+
+- **`cli_type`**: `"claude"` (Default) oder `"gemini"`.
+- **`cli_path`**: voller Pfad zur CLI-Binärdatei. Leer = automatische Suche
+  (PATH plus übliche Orte wie `/opt/homebrew/bin`). Nötig, wenn Anki die CLI
+  nicht findet — Terminal: `which claude` bzw. `which gemini`.
+- **`cli_model`**: optionales Modell (z. B. `claude-haiku-4-5` oder
+  `gemini-2.5-flash`); leer = CLI-Standard.
+
+Hinweise: Die CLI muss installiert und eingeloggt sein (`claude` bzw.
+`gemini` einmal im Terminal starten). Aufrufe sind langsamer als API-Calls
+(Prozess-Start), Bilder/Image-Occlusion werden bei diesem Provider nicht
+mitgeschickt, und Prompt-Caching ist inaktiv.
+
 - **`setup_completed`**: intern — merkt sich, dass der Erststart-Assistent
   gelaufen ist (`Extras → AI Answer Grading → Einrichtung starten…`).
 

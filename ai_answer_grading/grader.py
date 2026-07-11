@@ -443,6 +443,101 @@ def _post_openai(
     return response.json()
 
 
+CLI_SEARCH_DIRS = (
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+    "/usr/bin",
+    os.path.expanduser("~/.local/bin"),
+    os.path.expanduser("~/bin"),
+)
+
+
+def _find_cli_binary(config: dict[str, Any]) -> str:
+    """Resolve the CLI binary path. Anki (GUI app) has a minimal PATH on
+    macOS, so we search common install locations explicitly."""
+    import shutil
+
+    configured = (config.get("cli_path") or "").strip()
+    if configured:
+        if os.path.isfile(configured):
+            return configured
+        raise GradingError(f"CLI nicht gefunden unter: {configured}")
+
+    name = "claude" if (config.get("cli_type") or "claude") == "claude" else "gemini"
+    found = shutil.which(name)
+    if found:
+        return found
+    for directory in CLI_SEARCH_DIRS:
+        candidate = os.path.join(directory, name)
+        if os.path.isfile(candidate):
+            return candidate
+    raise GradingError(
+        f"'{name}' CLI nicht gefunden. Bitte installieren (und ggf. den vollen "
+        "Pfad in den Einstellungen unter 'CLI-Pfad' eintragen)."
+    )
+
+
+def _run_cli(
+    config: dict[str, Any],
+    system_blocks: list[dict[str, Any]],
+    user_content: str | list[dict[str, Any]],
+) -> str:
+    """Grade via a local CLI (Claude Code CLI or Gemini CLI) — no API key.
+
+    Claude CLI bills against the user's Claude subscription; Gemini CLI has a
+    free tier. Prompt goes in via stdin (no arg-length limits); images are
+    not supported on this provider.
+    """
+    import subprocess
+
+    binary = _find_cli_binary(config)
+    cli_type = (config.get("cli_type") or "claude").strip().lower()
+    model = (config.get("cli_model") or "").strip()
+
+    system_text = "\n\n".join(block["text"] for block in system_blocks)
+    if isinstance(user_content, list):
+        log.info("CLI-Provider: Bilder werden nicht unterstützt und übersprungen.")
+        user_text = "\n".join(
+            b.get("text", "") for b in user_content if b.get("type") == "text"
+        )
+    else:
+        user_text = user_content
+    prompt = system_text + "\n\n" + user_text
+
+    if cli_type == "gemini":
+        cmd = [binary]
+        if model:
+            cmd += ["-m", model]
+    else:
+        cmd = [binary, "-p", "--output-format", "text"]
+        if model:
+            cmd += ["--model", model]
+
+    # CLI startup + inference is slower than a raw API call.
+    timeout = max(float(config.get("request_timeout_s") or 60), 120.0)
+    try:
+        proc = subprocess.run(
+            cmd,
+            input=prompt.encode("utf-8"),
+            capture_output=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise GradingError(f"CLI-Zeitüberschreitung nach {timeout:.0f}s.") from exc
+    except OSError as exc:
+        raise GradingError(f"CLI konnte nicht gestartet werden: {exc}") from exc
+
+    stdout = proc.stdout.decode("utf-8", errors="replace").strip()
+    if proc.returncode != 0:
+        stderr = proc.stderr.decode("utf-8", errors="replace").strip()
+        raise GradingError(
+            f"CLI-Fehler (Exit {proc.returncode}): {(stderr or stdout)[:300]}"
+        )
+    if not stdout:
+        raise GradingError("CLI lieferte keine Ausgabe.")
+    return stdout
+
+
 def _resolve_bedrock_bearer(config: dict[str, Any]) -> str:
     """Long-term Bedrock API key (Bearer token), config or env fallback."""
     return (config.get("bedrock_api_key") or "").strip() or os.environ.get(
@@ -576,6 +671,11 @@ def _validate_credentials(config: dict[str, Any]) -> str:
         if not (config.get("openai_model") or "").strip():
             raise GradingError("OpenAI-kompatibler Provider: 'openai_model' muss gesetzt sein.")
         # API key is optional — local servers (Ollama, LM Studio) need none.
+    elif provider == "cli":
+        cli_type = (config.get("cli_type") or "claude").strip().lower()
+        if cli_type not in ("claude", "gemini"):
+            raise GradingError(f"Unbekannter cli_type: {cli_type!r} (claude oder gemini).")
+        _find_cli_binary(config)  # raises with install hint if missing
     else:
         raise GradingError(f"Unbekannter Provider: {provider!r}")
     return provider
@@ -589,8 +689,8 @@ def warm_cache(config: dict[str, Any], script_text: str) -> None:
     Blocking — call from a background thread; raises GradingError on failure.
     """
     provider = _validate_credentials(config)
-    if provider == "openai":
-        return  # no Anthropic-style prompt caching to warm on generic servers
+    if provider in ("openai", "cli"):
+        return  # no Anthropic-style prompt caching to warm on these providers
     language = config.get("feedback_language") or "Deutsch"
     system_blocks = build_system_blocks(
         language, script_text, custom_rules=config.get("custom_prompt")
@@ -640,6 +740,8 @@ def grade_answer(
                 return _extract_text(_post_bedrock(config, system_blocks, content))
             if provider == "openai":
                 return _extract_text_openai(_post_openai(config, system_blocks, content))
+            if provider == "cli":
+                return _run_cli(config, system_blocks, content)
             return _extract_text(_post_anthropic(config, system_blocks, content))
         except requests.exceptions.Timeout as exc:
             raise GradingError("Zeitüberschreitung beim API-Call.") from exc
