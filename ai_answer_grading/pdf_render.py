@@ -49,7 +49,7 @@ def render_page_png(
         if os.path.isfile(out_path):
             return out_path
 
-        doc = QPdfDocument()
+        doc = QPdfDocument(None)  # PyQt 6.11+ requires the parent arg explicitly
         if doc.load(pdf_path) != QPdfDocument.Error.None_:
             log.warning("QtPdf konnte %s nicht laden.", pdf_path)
             return None
