@@ -723,10 +723,11 @@ def grade_answer(
     """
     provider = _validate_credentials(config)
 
-    try:
-        import requests
-    except ImportError as exc:  # pragma: no cover — always bundled in Anki
-        raise GradingError("Die 'requests'-Library ist nicht verfügbar.") from exc
+    if provider != "cli":  # CLI runs as subprocess, no HTTP library needed
+        try:
+            import requests
+        except ImportError as exc:  # pragma: no cover — always bundled in Anki
+            raise GradingError("Die 'requests'-Library ist nicht verfügbar.") from exc
 
     language = config.get("feedback_language") or "Deutsch"
     system_blocks = build_system_blocks(
@@ -735,13 +736,13 @@ def grade_answer(
     user_content = build_user_content(front, back, answer, images, io_hint, explain_mode)
 
     def _call(content: str | list[dict[str, Any]]) -> str:
+        if provider == "cli":
+            return _run_cli(config, system_blocks, content)
         try:
             if provider == "bedrock":
                 return _extract_text(_post_bedrock(config, system_blocks, content))
             if provider == "openai":
                 return _extract_text_openai(_post_openai(config, system_blocks, content))
-            if provider == "cli":
-                return _run_cli(config, system_blocks, content)
             return _extract_text(_post_anthropic(config, system_blocks, content))
         except requests.exceptions.Timeout as exc:
             raise GradingError("Zeitüberschreitung beim API-Call.") from exc
