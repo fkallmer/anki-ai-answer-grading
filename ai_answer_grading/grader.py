@@ -268,7 +268,7 @@ def parse_grading_json(text: str) -> GradingResult:
                     out.append(("", item))
             elif isinstance(item, str):
                 match = re.search(
-                    r"^(?:(.+?)\s*[:|,]\s*)?(?:S(?:eite)?\.?\s*)?(\d+)\s*$", item.strip()
+                    r"^(?:(.+?)[\s:|,]+)??(?:S(?:eite)?\.?\s*)?(\d+)\s*$", item.strip()
                 )
                 if match:
                     page = int(match.group(2))
