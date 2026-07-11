@@ -19,7 +19,8 @@ Type your answer into a text box below the card front. An LLM (Anthropic Claude,
 <b>Features</b>
 
 <ul>
-<li><b>Two providers:</b> Anthropic API (api key) or AWS Bedrock (Bedrock API key / IAM credentials, no boto3 required)</li>
+<li><b>Works for free:</b> use Google Gemini's free tier (just a Google account needed) or a fully local model via Ollama/LM Studio — a first-run wizard guides you from zero to a working setup in about two minutes</li>
+<li><b>Providers:</b> Anthropic API, AWS Bedrock (no boto3 required), or any OpenAI-compatible endpoint (Gemini, OpenRouter, Groq, Ollama, LM Studio — with presets)</li>
 <li><b>Lecture-script context:</b> map decks (incl. subdecks) to your own PDF/text scripts via a file picker; the script helps the model understand your course's terminology and notation — with prompt caching so it is billed only once per session</li>
 <li><b>Images & Image Occlusion:</b> card images are sent along; native Anki Image Occlusion cards are detected and graded against the exact occluded region</li>
 <li><b>Customizable grading prompt:</b> adjust persona, strictness and rating criteria in a settings dialog — the JSON output contract stays intact</li>
@@ -30,15 +31,14 @@ Type your answer into a text box below the card front. An LLM (Anthropic Claude,
 
 <b>⚠️ Privacy & cost — please read</b>
 
-This add-on sends card content (question, answer, your typed answer, card images, and excerpts of any lecture script you configure) to the LLM provider you select — Anthropic (anthropic.com) or Amazon Web Services (AWS Bedrock). Nothing is sent unless you actively submit an answer for grading. You need your own API key, and every grading call costs money with your provider (typically well under a cent per card with default settings; images and large scripts increase cost). API keys are stored in plain text in Anki's add-on configuration.
+This add-on sends card content (question, answer, your typed answer, card images, and excerpts of any lecture script you configure) to the LLM provider you select — Anthropic, AWS, Google, OpenRouter, Groq, or (with Ollama/LM Studio) no one at all: local models keep everything on your machine. Nothing is sent unless you actively submit an answer for grading. Depending on the provider, grading is free (Gemini free tier, local models) or costs money with your provider (typically well under a cent per card). API keys are stored in plain text in Anki's add-on configuration.
 
 <b>Setup</b>
 
 <ol>
-<li>Install the add-on and restart Anki.</li>
-<li>Tools → AI Answer Grading → Einstellungen… — choose your provider and enter your API key.</li>
+<li>Install the add-on and restart Anki — a setup wizard opens automatically and walks you through getting a free key (or connecting a local model), then tests the connection.</li>
 <li>Optional: Tools → AI Answer Grading → Skript für Deck wählen… to attach lecture PDFs to a deck.</li>
-<li>Verify with Tools → AI Answer Grading → Test-Bewertung ausführen.</li>
+<li>All options live in Tools → AI Answer Grading → Einstellungen…</li>
 </ol>
 
 Note: the user interface and default feedback language are currently German (the feedback language is configurable). English UI is on the roadmap — feedback welcome.
