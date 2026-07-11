@@ -129,6 +129,10 @@ def _answer_box_html(card: Any) -> str:
       style="padding:0.4em 1.1em; border:1px solid #8886; border-radius:6px;
              background:transparent; color:inherit; cursor:pointer;">
       Bewerten (Strg+Enter)</button>
+    <button id="ai-explain-btn" title="Direkt aufdecken und Erklärung holen (Strg+Shift+Enter)"
+      style="padding:0.4em 1.1em; border:1px dashed #8886; border-radius:6px;
+             background:transparent; color:inherit; cursor:pointer; opacity:0.85;">
+      Keine Ahnung 💡</button>
     <label style="display:flex; align-items:center; gap:0.35em; cursor:pointer;
                   opacity:0.85; user-select:none;">
       <input type="checkbox" id="ai-auto-toggle" {auto_checked}>
@@ -141,20 +145,34 @@ def _answer_box_html(card: Any) -> str:
 (function() {{
   var ta = document.getElementById('ai-answer-input');
   var btn = document.getElementById('ai-grade-btn');
+  var explainBtn = document.getElementById('ai-explain-btn');
   var auto = document.getElementById('ai-auto-toggle');
   if (!ta || !btn) {{ return; }}
+  function lock(label) {{
+    btn.disabled = true;
+    if (explainBtn) {{ explainBtn.disabled = true; }}
+    btn.textContent = label;
+    ta.readOnly = true;
+  }}
   function send() {{
     if (btn.disabled) {{ return; }}
     var v = ta.value.trim();
     if (!v) {{ return; }}
-    btn.disabled = true;
-    btn.textContent = 'Bewerte…';
-    ta.readOnly = true;
+    lock('Bewerte…');
     pycmd('ai_grade:' + encodeURIComponent(v));
   }}
+  function explain() {{
+    if (btn.disabled) {{ return; }}
+    lock('Hole Erklärung…');
+    pycmd('ai_explain');
+  }}
   btn.addEventListener('click', send);
+  if (explainBtn) {{ explainBtn.addEventListener('click', explain); }}
   ta.addEventListener('keydown', function(e) {{
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {{ e.preventDefault(); send(); }}
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {{
+      e.preventDefault();
+      if (e.shiftKey) {{ explain(); }} else {{ send(); }}
+    }}
   }});
   if (auto) {{
     auto.addEventListener('change', function() {{
@@ -304,6 +322,10 @@ def on_js_message(handled: tuple[bool, Any], message: str, context: Any) -> tupl
         _set_auto_answer(enabled)
         return (True, None)
 
+    if message == "ai_explain":
+        _start_grading("", explain_mode=True)
+        return (True, None)
+
     if message == "ai_cancel_auto":
         session.auto_cancelled = True
         return (True, None)
@@ -331,8 +353,8 @@ def _set_auto_answer(enabled: bool) -> None:
         auto_action.blockSignals(False)
 
 
-def _start_grading(answer: str) -> None:
-    """Reveal the answer and grade in the background. Never blocks the UI."""
+def _start_grading(answer: str, explain_mode: bool = False) -> None:
+    """Reveal the answer and grade (or explain) in the background."""
     reviewer = mw.reviewer
     card = reviewer.card if reviewer else None
     if card is None:
@@ -385,7 +407,14 @@ def _start_grading(answer: str) -> None:
                 bool(io_hint),
             )
         return grader.grade_answer(
-            config, front, back, answer, script_text, images=images, io_hint=io_hint
+            config,
+            front,
+            back,
+            answer,
+            script_text,
+            images=images,
+            io_hint=io_hint,
+            explain_mode=explain_mode,
         )
 
     mw.taskman.run_in_background(task, lambda fut: _on_grading_done(fut, card.id))
@@ -448,6 +477,17 @@ def on_ctrl_enter() -> None:
         and session.result is not None
     ):
         _auto_answer(reviewer.card.id, session.result.rating)
+
+
+def on_ctrl_shift_enter() -> None:
+    """Question side: give up and fetch the explanation directly."""
+    reviewer = mw.reviewer
+    if not reviewer or not reviewer.card or reviewer.state != "question":
+        return
+    reviewer.web.eval(
+        "(function(){var b=document.getElementById('ai-explain-btn');"
+        "if(b && !b.disabled){b.click();}})();"
+    )
 
 
 def _gather_images(

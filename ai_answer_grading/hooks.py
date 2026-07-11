@@ -12,6 +12,8 @@ def _on_state_shortcuts(state: str, shortcuts: list) -> None:
     if state == "review":
         shortcuts.append(("Ctrl+Return", ui.on_ctrl_enter))
         shortcuts.append(("Ctrl+Enter", ui.on_ctrl_enter))  # numpad Enter
+        shortcuts.append(("Ctrl+Shift+Return", ui.on_ctrl_shift_enter))
+        shortcuts.append(("Ctrl+Shift+Enter", ui.on_ctrl_shift_enter))
 
 
 def register() -> None:

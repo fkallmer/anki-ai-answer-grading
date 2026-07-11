@@ -103,7 +103,9 @@ ohne Text davor oder danach, exakt in dieser Struktur:
 WICHTIG: feedback, Punktelisten und explanation dürfen sich inhaltlich NICHT
 wiederholen — jede Information erscheint genau einmal, am passendsten Ort.
 Alle Strings sind reiner Fließtext OHNE Markdown (kein **fett**, kein *kursiv*,
-keine Aufzählungszeichen, keine Überschriften)."""
+keine Aufzählungszeichen, keine Überschriften). Innerhalb der Strings KEINE
+geraden doppelten Anführungszeichen verwenden — nutze „deutsche" oder 'einfache'
+Anführungszeichen, damit das JSON gültig bleibt."""
 
 
 def build_rules_prompt(language: str, custom_rules: str | None = None) -> str:
@@ -140,8 +142,21 @@ def build_system_blocks(
     return blocks
 
 
+EXPLAIN_MODE_INSTRUCTION = """DER LERNENDE WEISS DIE ANTWORT NICHT und möchte direkt die Erklärung.
+Setze "score": 0 und "rating": 1. Lasse correct_points und wrong_points leer.
+"missing_points": die 2-4 Kernpunkte der Musterantwort als Stichpunkte.
+"explanation": besonders klar und etwas ausführlicher als sonst (4-8 Sätze) —
+eine gute Tutor-Erklärung zum Neulernen des Inhalts, mit dem wichtigsten
+Zusammenhang. "feedback": ein einziger kurzer, sachlicher Satz."""
+
+
 def build_user_message(
-    front: str, back: str, answer: str, io_hint: str | None = None, has_images: bool = False
+    front: str,
+    back: str,
+    answer: str,
+    io_hint: str | None = None,
+    has_images: bool = False,
+    explain_mode: bool = False,
 ) -> str:
     image_note = (
         "\nHINWEIS: Die Bilder der Karte sind diesem Prompt beigefügt. Beziehe sie "
@@ -162,16 +177,22 @@ diesen Bereich korrekt benennt bzw. beschreibt.
         if io_hint
         else ""
     )
+    if explain_mode:
+        closing = (
+            EXPLAIN_MODE_INSTRUCTION + "\n\nNur das JSON-Objekt ausgeben."
+        )
+    else:
+        closing = f"""ANTWORT DES LERNENDEN:
+{answer}
+
+Bewerte die Antwort des Lernenden jetzt gemäß den Regeln. Nur das JSON-Objekt ausgeben."""
     return f"""KARTENVORDERSEITE (Frage):
 {front}
 {image_note}{io_note}
 KARTENRÜCKSEITE (Musterantwort / Bewertungsmaßstab):
 {back}
 
-ANTWORT DES LERNENDEN:
-{answer}
-
-Bewerte die Antwort des Lernenden jetzt gemäß den Regeln. Nur das JSON-Objekt ausgeben."""
+{closing}"""
 
 
 def build_user_content(
@@ -180,9 +201,12 @@ def build_user_content(
     answer: str,
     images: list[tuple[str, str]] | None = None,
     io_hint: str | None = None,
+    explain_mode: bool = False,
 ) -> str | list[dict[str, Any]]:
     """User content: plain string, or image blocks + text block when images exist."""
-    text = build_user_message(front, back, answer, io_hint, has_images=bool(images))
+    text = build_user_message(
+        front, back, answer, io_hint, has_images=bool(images), explain_mode=explain_mode
+    )
     if not images:
         return text
     blocks: list[dict[str, Any]] = [
@@ -504,11 +528,14 @@ def grade_answer(
     script_text: str | None = None,
     images: list[tuple[str, str]] | None = None,
     io_hint: str | None = None,
+    explain_mode: bool = False,
 ) -> GradingResult:
     """Grade an answer. Blocking — call from a background thread.
 
     `images`: (media_type, base64) tuples sent as image blocks before the text.
     `io_hint`: description of the queried Image-Occlusion region, if any.
+    `explain_mode`: user gave up — request a thorough explanation instead of
+    grading; the model returns score 0 / rating 1 (Again).
     Performs one retry on JSON parse failure with a stricter instruction,
     then raises GradingError.
     """
@@ -523,7 +550,7 @@ def grade_answer(
     system_blocks = build_system_blocks(
         language, script_text, custom_rules=config.get("custom_prompt")
     )
-    user_content = build_user_content(front, back, answer, images, io_hint)
+    user_content = build_user_content(front, back, answer, images, io_hint, explain_mode)
 
     def _call(content: str | list[dict[str, Any]]) -> str:
         try:

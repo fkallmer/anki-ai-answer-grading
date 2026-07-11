@@ -383,6 +383,15 @@ class TestMedia(unittest.TestCase):
         self.assertIn("IMAGE-OCCLUSION", content)
         self.assertIn("rect bei 30%/45%", content)
 
+    def test_explain_mode_message(self):
+        text = grader.build_user_message("F", "B", "", explain_mode=True)
+        self.assertIn("WEISS DIE ANTWORT NICHT", text)
+        self.assertNotIn("ANTWORT DES LERNENDEN", text)
+        self.assertIn("KARTENRÜCKSEITE", text)
+        normal = grader.build_user_message("F", "B", "meine Antwort")
+        self.assertIn("ANTWORT DES LERNENDEN", normal)
+        self.assertNotIn("WEISS DIE ANTWORT NICHT", normal)
+
     def test_user_content_plain(self):
         content = grader.build_user_content("F", "B", "A")
         self.assertIsInstance(content, str)
